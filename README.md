@@ -1,10 +1,10 @@
 # CandyDispenser
 
 `CandyDispenser` is a blueprint to manage the distribution of any number of fungibles to people depositing a fungible (`GBOF`).  
-When a user deposits a `GBOF` a `DckslapDepositedEvent` is emitted; this event can be intercepted by a bot that generates a random number from 0 to 999 and pass it to the `CandyDispenser` component.  
+When a user deposits a `GBOF` a `GbofDepositedEvent` is emitted; this event can be intercepted by a bot that generates a random number from 0 to 999 and pass it to the `CandyDispenser` component.  
 
 The owner can deposit any number of fungibles in `CandyDispenser` and define up to 10 rules accordig which the fungibles will be sent back to the depositor. 
- 
+
 ## `new`
 Use this function to instatiate a new `CandyDispenser` component.  
 
@@ -72,7 +72,7 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "set_rule"
-    <RULE_NUMBER>usize
+    <RULE_NUMBER>u64
     <MIN_DEPOSITS>u32
     <EXACT_DEPOSIT_ONLY>
     <THRESHOLD>u16
@@ -105,7 +105,7 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "unset_rule"
-    <RULE_NUMBER>usize
+    <RULE_NUMBER>u64
 ;
 ```
 
@@ -137,7 +137,7 @@ CALL_METHOD
 ```
 
 ## `deposit_xrd`
-Use this method to deposit XRD to pay future users' transactions
+Use this method to deposit XRD to pay future users' transactions.  
 
 ```
 CALL_METHOD

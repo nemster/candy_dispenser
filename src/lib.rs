@@ -56,8 +56,8 @@ mod candy_dispenser {
             gbof_address: ResourceAddress,
         ) -> Global<CandyDispenser> {
             let mut rules:Vec<Option<Rule>> = vec![];
-            for i in 0..RULES {
-                rules[i] = None;
+            for _i in 0..RULES {
+                rules.push(None);
             }
             Self {
                 candy_vaults: KeyValueStore::new_with_registered_type(),
