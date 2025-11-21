@@ -1,19 +1,37 @@
 use scrypto::prelude::*;
 
-static RULES: usize = 10;
+static LEVELS: usize = 13;
+static RULES: usize = 15;
 
-#[derive(ScryptoSbor)]
+#[derive(ScryptoSbor, Clone)]
 struct Rule {
-    min_deposits: u32,
-    exact_deposit_only: bool,
+    min_dckslap_deposits: u32,
+    exact_dckslap_deposit_only: bool,
     threshold: u16,
+    choice: u8,
     candy_address: ResourceAddress,
     amount: u8,
 }
 
+type RuleSet = Vec<Option<Rule>>;
+
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct DckslapDepositedEvent {
     account: Global<Account>,
+    choice: u8,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct UserLevelUpEvent {
+    account: Global<Account>,
+    level: u8,
+}
+
+#[derive(ScryptoSbor, Clone)]
+struct User {
+    deposited_dckslap: u32,
+    level: u8,
+    deposited_gbof: u8,
 }
 
 #[blueprint]
@@ -21,10 +39,11 @@ struct DckslapDepositedEvent {
     ResourceAddress,
     Vault,
     Global<Account>,
-    u32,
+    User,
 )]
 #[events(
     DckslapDepositedEvent,
+    UserLevelUpEvent,
 )]
 mod candy_dispenser {
     enable_method_auth! {
@@ -35,6 +54,7 @@ mod candy_dispenser {
             deposit_candy => restrict_to: [OWNER];
             set_rule => restrict_to: [OWNER];
             unset_rule => restrict_to: [OWNER];
+            deposit_dckslap => PUBLIC;
             deposit_gbof => PUBLIC;
             send_candies => restrict_to: [bot];
             deposit_xrd => PUBLIC;
@@ -43,9 +63,10 @@ mod candy_dispenser {
 
     struct CandyDispenser {
         candy_vaults: KeyValueStore<ResourceAddress, Vault>,
+        dckslap_vault: Vault,
         gbof_vault: Vault,
-        deposited_gbof: KeyValueStore<Global<Account>, u32>,
-        rules: Vec<Option<Rule>>,
+        users: KeyValueStore<Global<Account>, User>,
+        rulesets: Vec<RuleSet>,
         xrd_vault: FungibleVault,
     }
 
@@ -53,17 +74,24 @@ mod candy_dispenser {
         pub fn new(
             owner_badge_address: ResourceAddress,
             bot_badge_address: ResourceAddress,
+            dckslap_address: ResourceAddress,
             gbof_address: ResourceAddress,
         ) -> Global<CandyDispenser> {
-            let mut rules:Vec<Option<Rule>> = vec![];
+            let mut ruleset: RuleSet = vec![];
             for _i in 0..RULES {
-                rules.push(None);
+                ruleset.push(None);
             }
+            let mut rulesets: Vec<RuleSet> = vec![];
+            for _i in 0..LEVELS {
+                rulesets.push(ruleset.clone());
+            }
+
             Self {
                 candy_vaults: KeyValueStore::new_with_registered_type(),
+                dckslap_vault: Vault::new(dckslap_address),
                 gbof_vault: Vault::new(gbof_address),
-                deposited_gbof: KeyValueStore::new_with_registered_type(),
-                rules: rules,
+                users: KeyValueStore::new_with_registered_type(),
+                rulesets: rulesets,
                 xrd_vault: FungibleVault::new(XRD),
             }
             .instantiate()
@@ -102,22 +130,29 @@ mod candy_dispenser {
 
         pub fn set_rule(
             &mut self,
+            level: usize,
             rule_number: usize,
-            min_deposits: u32,
-            exact_deposit_only: bool,
+            min_dckslap_deposits: u32,
+            exact_dckslap_deposit_only: bool,
             threshold: u16,
+            choice: u8,
             candy_address: ResourceAddress,
             amount: u8,
         ) {
+            assert!(
+                level < LEVELS,
+                "Level out of range"
+            );
             assert!(
                 rule_number < RULES,
                 "Rule number out of range"
             );
 
-            self.rules[rule_number] = Some(Rule {
-                min_deposits: min_deposits,
-                exact_deposit_only: exact_deposit_only,
+            self.rulesets[level][rule_number] = Some(Rule {
+                min_dckslap_deposits: min_dckslap_deposits,
+                exact_dckslap_deposit_only: exact_dckslap_deposit_only,
                 threshold: threshold,
+                choice: choice,
                 candy_address: candy_address,
                 amount: amount,
             });
@@ -125,16 +160,68 @@ mod candy_dispenser {
 
         pub fn unset_rule(
             &mut self,
+            level: usize,
             rule_number: usize,
         ) {
+            assert!(
+                level < LEVELS,
+                "Level out of range"
+            );
             assert!(
                 rule_number < RULES,
                 "Rule number out of range"
             );
 
-            self.rules[rule_number] = None;
+            self.rulesets[level][rule_number] = None;
         }
 
+        pub fn deposit_dckslap(
+            &mut self,
+            mut dckslap_bucket: Bucket,
+            account: Global<Account>,
+            choice: u8,
+        ) -> Bucket {
+            self.pay_fees(dec!(1));
+
+            Runtime::assert_access_rule(account.get_owner_role().rule);
+
+            assert!(
+                choice > 0,
+                "Wrong choice"
+            );
+
+            self.dckslap_vault.put(
+                dckslap_bucket.take(1)
+            );
+
+            let user = self.users.get_mut(&account);
+            match user {
+                Some(mut user) => {
+                    user.deposited_dckslap += 1;
+                },
+                None => {
+                    drop(user);
+                    self.users.insert(
+                        account,
+                        User {
+                            deposited_dckslap: 1,
+                            level: 0,
+                            deposited_gbof: 0,
+                        }
+                    );
+                },
+            }
+
+            Runtime::emit_event(
+                DckslapDepositedEvent {
+                    account: account,
+                    choice: choice,
+                }
+            );
+
+            dckslap_bucket
+        }
+        
         pub fn deposit_gbof(
             &mut self,
             mut gbof_bucket: Bucket,
@@ -142,46 +229,76 @@ mod candy_dispenser {
         ) -> Bucket {
             self.pay_fees(dec!(1));
 
+            Runtime::assert_access_rule(account.get_owner_role().rule);
+
             self.gbof_vault.put(
                 gbof_bucket.take(1)
             );
 
-            let deposited = self.deposited_gbof.get_mut(&account);
-            match deposited {
-                Some(mut number) => {
-                    *number += 1;
+            let user = self.users.get_mut(&account);
+            match user {
+                Some(mut user) => {
+
+                    assert!(
+                        usize::from(user.level + 1) < LEVELS,
+                        "Maximum level reached"
+                    );
+
+                    if user.deposited_gbof == user.level {
+                        user.level += 1;
+                        user.deposited_gbof = 0;
+
+                        Runtime::emit_event(
+                            UserLevelUpEvent {
+                                account: account,
+                                level: user.level,
+                            }
+                        );
+                    } else {
+                        user.deposited_gbof += 1;
+                    }
                 },
                 None => {
-                    drop(deposited);
-                    let number = 1;
-                    self.deposited_gbof.insert(account, number);
+                    drop(user);
+
+                    self.users.insert(
+                        account,
+                        User {
+                            deposited_dckslap: 0,
+                            level: 1,
+                            deposited_gbof: 0,
+                        }
+                    );
+                    
+                    Runtime::emit_event(
+                        UserLevelUpEvent {
+                            account: account,
+                            level: 1,
+                        }
+                    );
                 },
             }
 
-            Runtime::emit_event(
-                DckslapDepositedEvent {
-                    account: account,
-                }
-            );
-
             gbof_bucket
         }
-        
+
         pub fn send_candies(
             &mut self,
             random_number: u16,
             mut account: Global<Account>,
+            choice: u8,
         ) {
             self.pay_fees(dec!(10));
 
-            let deposited = *self.deposited_gbof.get(&account).unwrap();
+            let user = self.users.get(&account).unwrap().clone();
 
             for i in 0..RULES {
-                match &self.rules[i] {
+                match &self.rulesets[usize::from(user.level)][i] {
                     Some(rule) => {
-                        if deposited >= rule.min_deposits &&
+                        if user.deposited_dckslap >= rule.min_dckslap_deposits &&
                             random_number >= rule.threshold &&
-                            ((deposited == rule.min_deposits) >= rule.exact_deposit_only) {
+                            ((user.deposited_dckslap == rule.min_dckslap_deposits) >= rule.exact_dckslap_deposit_only) &&
+                            (choice == rule.choice || rule.choice == 0) {
                                 let mut vault = self.candy_vaults.get_mut(&rule.candy_address).unwrap();
                                 let bucket = vault.take(rule.amount);
                                 account.try_deposit_or_abort(bucket, None);
