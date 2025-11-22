@@ -88,8 +88,6 @@ CALL_METHOD
     "set_rule"
     <LEVEL>u64
     <RULE_NUMBER>u64
-    <MIN_DCKSLAP_DEPOSITS>u32
-    <EXACT_DCKSLAP_DEPOSIT_ONLY>
     <THRESHOLD>u16
     <CHOICE>u8
     Address("<COIN_ADDRESS>")
@@ -102,8 +100,6 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 `<LEVEL>`: user level this rule applies to [0 - 12].  
 `<RULE_NUMBER>`: the number of the rule to set [0 - 14].  
-`<MIN_DCKSLAP_DEPOSITs>`: this rule can be only matched when a user has deposited at least this number of `DCKSLAP`.  
-`<EXACT_DCKSLAP_DEPOSIT_ONLY>`: if `true` the rule will be matched only when a user has deposited exactly `<MIN_DCKSLAP_DEPOSITS>` `DCKSLAP`.  
 `<THRESHOLD>`: this rule will be matched only if the random number reported by the bot is bigger or equal than this (0 = always, 1000 = never).   
 `<CHOICE>`: this rule only applies to deposits where the user made the same choice [1 - 255], or to any possible choice (0).  
 `<COIN_ADDRESS>`: resource address of the coin to send when this rule is matched.  

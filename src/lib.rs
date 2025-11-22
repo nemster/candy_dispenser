@@ -5,8 +5,6 @@ static RULES: usize = 15;
 
 #[derive(ScryptoSbor, Clone)]
 struct Rule {
-    min_dckslap_deposits: u32,
-    exact_dckslap_deposit_only: bool,
     threshold: u16,
     choice: u8,
     candy_address: ResourceAddress,
@@ -29,7 +27,6 @@ struct UserLevelUpEvent {
 
 #[derive(ScryptoSbor, Clone)]
 struct User {
-    deposited_dckslap: u32,
     level: u8,
     deposited_gbof: u8,
 }
@@ -132,8 +129,6 @@ mod candy_dispenser {
             &mut self,
             level: usize,
             rule_number: usize,
-            min_dckslap_deposits: u32,
-            exact_dckslap_deposit_only: bool,
             threshold: u16,
             choice: u8,
             candy_address: ResourceAddress,
@@ -149,8 +144,6 @@ mod candy_dispenser {
             );
 
             self.rulesets[level][rule_number] = Some(Rule {
-                min_dckslap_deposits: min_dckslap_deposits,
-                exact_dckslap_deposit_only: exact_dckslap_deposit_only,
                 threshold: threshold,
                 choice: choice,
                 candy_address: candy_address,
@@ -194,22 +187,15 @@ mod candy_dispenser {
                 dckslap_bucket.take(1)
             );
 
-            let user = self.users.get_mut(&account);
-            match user {
-                Some(mut user) => {
-                    user.deposited_dckslap += 1;
-                },
-                None => {
-                    drop(user);
-                    self.users.insert(
-                        account,
-                        User {
-                            deposited_dckslap: 1,
-                            level: 0,
-                            deposited_gbof: 0,
-                        }
-                    );
-                },
+            let user = self.users.get(&account);
+            if user.is_none() {
+                self.users.insert(
+                    account,
+                    User {
+                        level: 0,
+                        deposited_gbof: 0,
+                    }
+                );
             }
 
             Runtime::emit_event(
@@ -264,7 +250,6 @@ mod candy_dispenser {
                     self.users.insert(
                         account,
                         User {
-                            deposited_dckslap: 0,
                             level: 1,
                             deposited_gbof: 0,
                         }
@@ -295,9 +280,7 @@ mod candy_dispenser {
             for i in 0..RULES {
                 match &self.rulesets[usize::from(user.level)][i] {
                     Some(rule) => {
-                        if user.deposited_dckslap >= rule.min_dckslap_deposits &&
-                            random_number >= rule.threshold &&
-                            ((user.deposited_dckslap == rule.min_dckslap_deposits) >= rule.exact_dckslap_deposit_only) &&
+                        if random_number >= rule.threshold &&
                             (choice == rule.choice || rule.choice == 0) {
                                 let mut vault = self.candy_vaults.get_mut(&rule.candy_address).unwrap();
                                 let bucket = vault.take(rule.amount);
