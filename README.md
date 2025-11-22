@@ -150,7 +150,7 @@ TAKE_ALL_FROM_WORKTOP
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
-    "deposit_dckspal"
+    "deposit_dckslap"
     Bucket("dckslap")
     Address("<ACCOUNT_ADDRESS>")
     <choice>u8
