@@ -1,22 +1,23 @@
 use scrypto::prelude::*;
 
-static LEVELS: usize = 13;
-static RULES: usize = 15;
+#[derive(ScryptoSbor)]
+struct RulePosition {
+    level: u8,
+    rule_number: u16,
+}
 
 #[derive(ScryptoSbor, Clone)]
 struct Rule {
-    threshold: u16,
-    choice: u8,
+    threshold: u32,
+    choice: u16,
     candy_address: ResourceAddress,
     amount: u8,
 }
 
-type RuleSet = Vec<Option<Rule>>;
-
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct DckslapDepositedEvent {
     account: Global<Account>,
-    choice: u8,
+    choice: u16,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -37,6 +38,8 @@ struct User {
     Vault,
     Global<Account>,
     User,
+    RulePosition,
+    Rule,
 )]
 #[events(
     DckslapDepositedEvent,
@@ -63,7 +66,7 @@ mod candy_dispenser {
         dckslap_vault: Vault,
         gbof_vault: Vault,
         users: KeyValueStore<Global<Account>, User>,
-        rulesets: Vec<RuleSet>,
+        rules: KeyValueStore<RulePosition, Rule>,
         xrd_vault: FungibleVault,
     }
 
@@ -74,21 +77,12 @@ mod candy_dispenser {
             dckslap_address: ResourceAddress,
             gbof_address: ResourceAddress,
         ) -> Global<CandyDispenser> {
-            let mut ruleset: RuleSet = vec![];
-            for _i in 0..RULES {
-                ruleset.push(None);
-            }
-            let mut rulesets: Vec<RuleSet> = vec![];
-            for _i in 0..LEVELS {
-                rulesets.push(ruleset.clone());
-            }
-
             Self {
                 candy_vaults: KeyValueStore::new_with_registered_type(),
                 dckslap_vault: Vault::new(dckslap_address),
                 gbof_vault: Vault::new(gbof_address),
                 users: KeyValueStore::new_with_registered_type(),
-                rulesets: rulesets,
+                rules: KeyValueStore::new_with_registered_type(),
                 xrd_vault: FungibleVault::new(XRD),
             }
             .instantiate()
@@ -127,52 +121,45 @@ mod candy_dispenser {
 
         pub fn set_rule(
             &mut self,
-            level: usize,
-            rule_number: usize,
-            threshold: u16,
-            choice: u8,
+            level: u8,
+            rule_number: u16,
+            threshold: u32,
+            choice: u16,
             candy_address: ResourceAddress,
             amount: u8,
         ) {
-            assert!(
-                level < LEVELS,
-                "Level out of range"
+            self.rules.insert(
+                RulePosition {
+                    level: level,
+                    rule_number: rule_number,
+                },
+                Rule {
+                    threshold: threshold,
+                    choice: choice,
+                    candy_address: candy_address,
+                    amount: amount,
+                }
             );
-            assert!(
-                rule_number < RULES,
-                "Rule number out of range"
-            );
-
-            self.rulesets[level][rule_number] = Some(Rule {
-                threshold: threshold,
-                choice: choice,
-                candy_address: candy_address,
-                amount: amount,
-            });
         }
 
         pub fn unset_rule(
             &mut self,
-            level: usize,
-            rule_number: usize,
+            level: u8,
+            rule_number: u16,
         ) {
-            assert!(
-                level < LEVELS,
-                "Level out of range"
+            self.rules.remove(
+                &RulePosition {
+                    level: level,
+                    rule_number: rule_number,
+                }
             );
-            assert!(
-                rule_number < RULES,
-                "Rule number out of range"
-            );
-
-            self.rulesets[level][rule_number] = None;
         }
 
         pub fn deposit_dckslap(
             &mut self,
             mut dckslap_bucket: Bucket,
             account: Global<Account>,
-            choice: u8,
+            choice: u16,
         ) -> Bucket {
             self.pay_fees(dec!(1));
 
@@ -226,7 +213,7 @@ mod candy_dispenser {
                 Some(mut user) => {
 
                     assert!(
-                        usize::from(user.level + 1) < LEVELS,
+                        user.level < u8::MAX,
                         "Maximum level reached"
                     );
 
@@ -269,16 +256,20 @@ mod candy_dispenser {
 
         pub fn send_candies(
             &mut self,
-            random_number: u16,
+            random_number: u32,
             mut account: Global<Account>,
-            choice: u8,
+            choice: u16,
         ) {
             self.pay_fees(dec!(10));
 
             let user = self.users.get(&account).unwrap().clone();
 
-            for i in 0..RULES {
-                match &self.rulesets[usize::from(user.level)][i] {
+            let mut rule_position = RulePosition {
+                level: user.level,
+                rule_number: 0,
+            };
+            loop {
+                match self.rules.get(&rule_position) {
                     Some(rule) => {
                         if random_number >= rule.threshold &&
                             (choice == rule.choice || rule.choice == 0) {
@@ -286,8 +277,10 @@ mod candy_dispenser {
                                 let bucket = vault.take(rule.amount);
                                 account.try_deposit_or_abort(bucket, None);
                         }
+
+                        rule_position.rule_number += 1;
                     },
-                    None => {},
+                    None => break,
                 }
             }
         }
