@@ -153,6 +153,11 @@ CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     <choice>u16
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
 `<ACCOUNT_ADDRESS>`: account address of the depositing user.  
