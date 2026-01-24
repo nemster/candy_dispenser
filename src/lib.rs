@@ -8,7 +8,8 @@ struct RulePosition {
 
 #[derive(ScryptoSbor, Clone)]
 struct Rule {
-    threshold: u32,
+    min_random: u32,
+    max_random: u32,
     choice: u16,
     candy_address: ResourceAddress,
     amount: u8,
@@ -123,18 +124,25 @@ mod candy_dispenser {
             &mut self,
             level: u8,
             rule_number: u16,
-            threshold: u32,
+            min_random: u32,
+            max_random: u32,
             choice: u16,
             candy_address: ResourceAddress,
             amount: u8,
         ) {
+            assert!(
+                min_random < max_random,
+                "This rule can never be matched"
+            );
+
             self.rules.insert(
                 RulePosition {
                     level: level,
                     rule_number: rule_number,
                 },
                 Rule {
-                    threshold: threshold,
+                    min_random: min_random,
+                    max_random: max_random,
                     choice: choice,
                     candy_address: candy_address,
                     amount: amount,
@@ -271,7 +279,7 @@ mod candy_dispenser {
             loop {
                 match self.rules.get(&rule_position) {
                     Some(rule) => {
-                        if random_number >= rule.threshold &&
+                        if random_number >= rule.min_random && random_number < rule.max_random &&
                             (choice == rule.choice || rule.choice == 0) {
                                 let mut vault = self.candy_vaults.get_mut(&rule.candy_address).unwrap();
                                 let bucket = vault.take(rule.amount);

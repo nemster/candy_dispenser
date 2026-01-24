@@ -90,7 +90,8 @@ CALL_METHOD
     "set_rule"
     <LEVEL>u8
     <RULE_NUMBER>u16
-    <THRESHOLD>u32
+    <MIN_RANDOM>u32
+    <MAX_RANDOM>u32
     <CHOICE>u16
     Address("<COIN_ADDRESS>")
     <COIN_AMOUNT>u8
@@ -102,7 +103,8 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 `<LEVEL>`: user level this rule applies to [0 - 255].  
 `<RULE_NUMBER>`: the number of the rule to set [0 - 65535].  
-`<THRESHOLD>`: this rule will be matched only if the random number reported by the bot is bigger or equal than this (0 = always, 1000000 = never).   
+`<MIN_RANDOM>`: this rule will be matched only if the random number reported by the bot is bigger or equal than this (0 = always, 1000000 = never).   
+`<MAX_RANDOM>`: this rule will be matched only if the random number reported by the bot is smaller than this (0 = never, 1000001 = always).   
 `<CHOICE>`: this rule only applies to deposits where the user made the same choice [1 - 65535], or to any possible choice (0).  
 `<COIN_ADDRESS>`: resource address of the coin to send when this rule is matched.  
 `<COIN_AMOUNT>`: amount of coins to send when this rule is matched.  
